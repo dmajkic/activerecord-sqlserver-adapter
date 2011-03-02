@@ -317,8 +317,7 @@ module ActiveRecord
                        row = handle.fetch
                        row ? [row] : [[]]                     
                      end
-
-              names = handle.columns(true).map{ |c| c.name.downcase }
+              names = handle.columns(true).map{ |c| downcase_metadata_names ? c.name.downcase : c.name }
               names_and_values = []
               rows.each do |row|
                 h = {}
@@ -370,7 +369,7 @@ module ActiveRecord
                           value
                         end
                 row << value
-                names << handle.get_name(row_index).to_s.downcase unless fields_named
+                names << handle.get_name(row_index).to_s unless fields_named
                 break if one_row_only
               end
               rows << row
@@ -385,7 +384,11 @@ module ActiveRecord
               h = {}
               i = 0
               while i < row.size
-                h[names[i]] = row[i]
+                if downcase_metadata_names
+                  h[names[i]] = row[i]
+                else
+                  h[names[i].downcase] = row[i]
+                end
                 i += 1
               end
               names_and_values << h
