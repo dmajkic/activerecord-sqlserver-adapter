@@ -385,9 +385,9 @@ module ActiveRecord
               i = 0
               while i < row.size
                 if downcase_metadata_names
-                  h[names[i]] = row[i]
-                else
                   h[names[i].downcase] = row[i]
+                else
+                  h[names[i]] = row[i]
                 end
                 i += 1
               end
