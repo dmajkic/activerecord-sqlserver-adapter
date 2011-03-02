@@ -303,7 +303,7 @@ module ActiveRecord
           @connection.use_utc = ActiveRecord::Base.default_timezone == :utc if @connection_supports_native_types
           case options[:fetch]
           when :all, :one
-            if @connection_supports_native_types
+            if @connection_supports_native_types and !downcase_metadata_names
               if options[:fetch] == :all
                 handle.each_hash || []
               else
@@ -317,7 +317,8 @@ module ActiveRecord
                        row = handle.fetch
                        row ? [row] : [[]]                     
                      end
-              names = handle.columns(true).map{ |c| c.name }
+
+              names = handle.columns(true).map{ |c| c.name.downcase }
               names_and_values = []
               rows.each do |row|
                 h = {}
@@ -369,7 +370,7 @@ module ActiveRecord
                           value
                         end
                 row << value
-                names << handle.get_name(row_index).to_s unless fields_named
+                names << handle.get_name(row_index).to_s.downcase unless fields_named
                 break if one_row_only
               end
               rows << row

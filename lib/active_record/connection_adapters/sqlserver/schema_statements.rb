@@ -9,7 +9,7 @@ module ActiveRecord
 
         def tables(name = nil)
           info_schema_query do
-            select_values "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME <> 'dtproperties'"
+            select_values "SELECT #{lower_sql}(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME <> 'dtproperties'"
           end
         end
 
@@ -30,6 +30,7 @@ module ActiveRecord
               columns = index[:index_keys].split(',').map do |column|
                 column.strip!
                 column.gsub! '(-)', '' if column.ends_with?('(-)')
+                column.downcase! if downcase_metadata_names
                 column
               end
               indexes << IndexDefinition.new(table_name, name, unique, columns)
@@ -139,7 +140,7 @@ module ActiveRecord
         
         def views(name = nil)
           @sqlserver_views_cache ||= 
-            info_schema_query { select_values("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME NOT IN ('sysconstraints','syssegments')") }
+            info_schema_query { select_values("SELECT #{lower_sql}(TABLE_NAME) FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME NOT IN ('sysconstraints','syssegments')") }
         end
         
         
@@ -178,8 +179,8 @@ module ActiveRecord
           table_name = unqualify_table_name(table_name)
           sql = %{
             SELECT
-            columns.TABLE_NAME as table_name,
-            columns.COLUMN_NAME as name,
+            #{lower_sql}(columns.TABLE_NAME) as table_name,
+            #{lower_sql}(columns.COLUMN_NAME) as name,
             columns.DATA_TYPE as type,
             columns.COLUMN_DEFAULT as default_value,
             columns.NUMERIC_SCALE as numeric_scale,
@@ -273,9 +274,9 @@ module ActiveRecord
         
         def get_table_name(sql)
           if sql =~ /^\s*insert\s+into\s+([^\(\s]+)\s*|^\s*update\s+([^\(\s]+)\s*/i
-            $1 || $2
+            downcase_metadata_names ? ($1 || $2).downcase : ($1 || $2)
           elsif sql =~ /from\s+([^\(\s]+)\s*/i
-            $1
+            downcase_metadata_names ? $1.downcase : $1
           else
             nil
           end
@@ -286,7 +287,7 @@ module ActiveRecord
         end
         
         def detect_column_for!(table_name, column_name)
-          unless column = columns(table_name).detect { |c| c.name == column_name.to_s }
+          unless column = columns(table_name).detect { |c| downcase_metadata_names ? c.name == column_name.to_s : c.name.downcase == column_name.to_s.downcase }
             raise ActiveRecordError, "No such column: #{table_name}.#{column_name}"
           end
           column
@@ -320,8 +321,13 @@ module ActiveRecord
         
         def views_real_column_name(table_name,column_name)
           view_definition = view_information(table_name)[:VIEW_DEFINITION]
-          match_data = view_definition.match(/([\w-]*)\s+as\s+#{column_name}/im)
-          match_data ? match_data[1] : column_name
+          if downcase_metadata_names
+          match_data = view_definition.downcase.match(/([\w-]*)\s+as\s+#{column_name.downcase}/im)
+          match_data ? match_data[1] : column_name.downcase
+          else
+             match_data = view_definition.match(/([\w-]*)\s+as\s+#{column_name}/im)
+             match_data ? match_data[1] : column_name
+          end
         end
         
         # === SQLServer Specific (Column/View Caches) =================== #

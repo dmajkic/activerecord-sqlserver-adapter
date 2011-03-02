@@ -173,7 +173,7 @@ module ActiveRecord
       
       cattr_accessor :native_text_database_type, :native_binary_database_type, :native_string_database_type,
                      :log_info_schema_queries, :enable_default_unicode_types, :auto_connect,
-                     :cs_equality_operator
+                     :cs_equality_operator, :downcase_metadata_names
       
       def initialize(logger,config)
         @connection_options = config
@@ -330,6 +330,13 @@ module ActiveRecord
         @@cs_equality_operator || 'COLLATE Latin1_General_CS_AS_WS ='
       end
       
+      def downcase_metadata_names
+        @@downcase_metadata_names.is_a?(TrueClass) ? true : false
+      end
+
+      def lower_sql
+        @@downcase_metadata_names.is_a?(TrueClass) ? 'LOWER' : ''
+      end
       
       protected
       
