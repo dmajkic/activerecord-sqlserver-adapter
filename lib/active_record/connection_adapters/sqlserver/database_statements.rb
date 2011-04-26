@@ -298,10 +298,11 @@ module ActiveRecord
             qo[:as] = options[:fetch] == :rows ? :array : :hash
           end
 
-          if downcase_metadata_names
+          if downcase_metadata_names and (query_options[:as] == :hash)
             h = handle.each(query_options)
             h.each_with_index do |r,i|
               tmp = {}
+              tmp.with_indifferent_access              
               r.each{|k,v| tmp[k.to_s.downcase] = v}
               h[i] = tmp
             end
