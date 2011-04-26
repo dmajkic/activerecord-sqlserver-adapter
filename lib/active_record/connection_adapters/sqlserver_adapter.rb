@@ -18,12 +18,12 @@ module ActiveRecord
     
     def self.sqlserver_connection(config) #:nodoc:
       config = config.dup.symbolize_keys!
-      config.reverse_merge! :mode => :odbc, :host => 'localhost', :username => 'sa', :password => ''
+      config.reverse_merge! :mode => :dblib, :host => 'localhost', :username => 'sa', :password => ''
       mode = config[:mode].to_s.downcase.underscore.to_sym
       case mode
       when :dblib
-        raise ArgumentError, 'Missing :dataserver configuration.' unless config.has_key?(:dataserver)
         require_library_or_gem 'tiny_tds'
+        warn("TinyTds v0.4.3 or higher required. Using #{TinyTds::VERSION}") unless TinyTds::Client.instance_methods.map(&:to_s).include?("active?")
       when :odbc
         raise ArgumentError, 'Missing :dsn configuration.' unless config.has_key?(:dsn)
         if RUBY_VERSION < '1.9'
@@ -164,9 +164,9 @@ module ActiveRecord
       include Sqlserver::Errors
       
       ADAPTER_NAME                = 'SQLServer'.freeze
-      VERSION                     = '3.0.10'.freeze
+      VERSION                     = '3.0.14'.freeze
       DATABASE_VERSION_REGEXP     = /Microsoft SQL Server\s+"?(\d{4}|\w+)"?/
-      SUPPORTED_VERSIONS          = [2005,2008,2011].freeze
+      SUPPORTED_VERSIONS          = [2005,2008,2010,2011].freeze
       
       attr_reader :database_version, :database_year,
                   :connection_supports_native_types
@@ -181,8 +181,13 @@ module ActiveRecord
         super(@connection, logger)
         @database_version = info_schema_query { select_value('SELECT @@version') }
         @database_year = begin
-                           year = DATABASE_VERSION_REGEXP.match(@database_version)[1]
-                           year == "Denali" ? 2011 : year.to_i
+                           if @database_version =~ /Microsoft SQL Azure/i
+                             @sqlserver_azure = true
+                             @database_version.match(/\s(\d{4})\s/)[1].to_i
+                           else
+                             year = DATABASE_VERSION_REGEXP.match(@database_version)[1]
+                             year == "Denali" ? 2011 : year.to_i
+                           end
                          rescue
                            0
                          end
@@ -229,15 +234,10 @@ module ActiveRecord
       # === Abstract Adapter (Connection Management) ================== #
       
       def active?
-        connected = case @connection_options[:mode]
-                    when :dblib
-                      !@connection.closed?
-                    when :odbc
-                      true
-                    else :adonet
-                      true
-                    end
-        return false if !connected
+        case @connection_options[:mode]
+        when :dblib
+          return @connection.active?
+        end
         raw_connection_do("SELECT 1")
         true
       rescue *lost_connection_exceptions
@@ -294,6 +294,10 @@ module ActiveRecord
         @database_year == 2011
       end
       
+      def sqlserver_azure?
+        @sqlserver_azure && @database_year == 2010
+      end
+      
       def version
         self.class::VERSION
       end
@@ -315,11 +319,11 @@ module ActiveRecord
       end
       
       def native_time_database_type
-        sqlserver_2008? ? 'time' : 'datetime'
+        sqlserver_2005? ? 'datetime' : 'time'
       end
       
       def native_date_database_type
-        sqlserver_2008? ? 'date' : 'datetime'
+        sqlserver_2005? ? 'datetime' : 'date'
       end
       
       def native_binary_database_type
@@ -367,17 +371,30 @@ module ActiveRecord
                         encoding = config[:encoding].present? ? config[:encoding] : nil
                         TinyTds::Client.new({ 
                           :dataserver    => config[:dataserver],
+                          :host          => config[:host],
+                          :port          => config[:port],
                           :username      => config[:username],
                           :password      => config[:password],
                           :database      => config[:database],
                           :appname       => appname,
                           :login_timeout => login_timeout,
                           :timeout       => timeout,
-                          :encoding      => encoding
+                          :encoding      => encoding,
+                          :azure         => config[:azure]
                         }).tap do |client|
-                          client.execute("SET ANSI_DEFAULTS ON").do
-                          client.execute("SET IMPLICIT_TRANSACTIONS OFF").do
-                          client.execute("SET CURSOR_CLOSE_ON_COMMIT OFF").do
+                          if config[:azure]
+                            client.execute("SET ANSI_NULLS ON").do
+                            client.execute("SET CURSOR_CLOSE_ON_COMMIT OFF").do
+                            client.execute("SET ANSI_NULL_DFLT_ON ON").do
+                            client.execute("SET IMPLICIT_TRANSACTIONS OFF").do
+                            client.execute("SET ANSI_PADDING ON").do
+                            client.execute("SET QUOTED_IDENTIFIER ON")
+                            client.execute("SET ANSI_WARNINGS ON").do
+                          else
+                            client.execute("SET ANSI_DEFAULTS ON").do
+                            client.execute("SET CURSOR_CLOSE_ON_COMMIT OFF").do
+                            client.execute("SET IMPLICIT_TRANSACTIONS OFF").do
+                          end
                         end
                       when :odbc
                         odbc = ['::ODBC','::ODBC_UTF8','::ODBC_NONE'].detect{ |odbc_ns| odbc_ns.constantize rescue nil }.constantize

@@ -1,4 +1,21 @@
 
+* 3.0.13 *
+
+* Allow TinyTDS/DBLIB mode to pass down :host/:port config options.
+
+
+* 3.0.12 *
+
+* Bug fix for previous TinyTDS lost connections.
+
+
+* 3.0.11 *
+
+* Azure compatibility.
+
+* TinyTDS enhancements for lost connections. Default connection mode.
+
+
 * 3.0.10 *
 
 * Fix #rowtable_orders visitor helper to use first column if no pk column was found.
