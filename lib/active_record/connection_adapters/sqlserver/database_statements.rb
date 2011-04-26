@@ -297,7 +297,17 @@ module ActiveRecord
             qo[:first] = true if options[:fetch] == :one
             qo[:as] = options[:fetch] == :rows ? :array : :hash
           end
-          handle.each(query_options)
+
+          if downcase_metadata_names
+            h = handle.each(query_options)
+            h.each_with_index do |r,i|
+              tmp = {}
+              r.each{|k,v| tmp[k.to_s.downcase] = v}
+              h[i] = tmp
+            end
+          else
+            handle.each(query_options)
+          end
         end
         
         def handle_to_names_and_values_odbc(handle, options={})
